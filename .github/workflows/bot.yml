@@ -7,7 +7,6 @@ on:
     - cron: '0 */5 * * *'
   workflow_dispatch:
 
-# هذا السطر يضمن إغلاق أي نسخة قديمة شغالة تلقائياً لمنع خطأ Conflict 409
 concurrency:
   group: telegram-bot-runner
   cancel-in-progress: true
@@ -15,6 +14,7 @@ concurrency:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    timeout-minutes: 350
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -34,5 +34,5 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
-          # يعمل لمدة 5 ساعات متواصلة ثم ينهي المهمة بعلامة صح خضراء ويعيد تشغيل نفسه
-          timeout 18000 python -u main.py || exit 0
+          # حلقة حماية: إذا توقف البوت لأي سبب يعيد تشغيله فوراً طوال مدة الـ 5 ساعات (18000 ثانية)
+          timeout 18000 bash -c 'while true; do python -u main.py; echo "Restarting bot in 2s..."; sleep 2; done' || exit 0
