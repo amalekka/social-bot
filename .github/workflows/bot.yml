@@ -4,8 +4,8 @@ on:
   push:
     branches: [ main ]
   schedule:
-    # يتم إعادة تشغيل البوت تلقائياً كل ساعة لضمان استمراره أونلاين للأبد
-    - cron: '0 * * * *'
+    # يتم إعادة التشغيل تلقائياً كل ساعتين لضمان استقرار السجلات ونظافة السيرفر
+    - cron: '0 */2 * * *'
   workflow_dispatch:
 
 jobs:
@@ -24,11 +24,11 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg
           pip install --upgrade pip
-          pip install pytelegrambotapi yt-dlp urllib3
+          pip install pytelegrambotapi==4.14.0 yt-dlp==2023.12.30 urllib3<3.0
 
-      - name: Run Bot Continuously
+      - name: Run Bot 
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
-          # تشغيل البوت لمدة 55 دقيقة قبل إعادة جدولة السيرفر تلقائياً
-          timeout 3300 python main.py || true
+          # تشغيل البوت لمدة ساعتين (7200 ثانية) ثم إعادة التشغيل بسلام لتحديث السجلات
+          timeout 7200 python main.py || true
