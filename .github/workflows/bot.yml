@@ -1,0 +1,34 @@
+name: Telegram Bot 24/7 Hosting
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    # يتم إعادة تشغيل البوت تلقائياً كل ساعة لضمان استمراره أونلاين للأبد
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          pip install --upgrade pip
+          pip install pytelegrambotapi yt-dlp urllib3
+
+      - name: Run Bot Continuously
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        run: |
+          # تشغيل البوت لمدة 55 دقيقة قبل إعادة جدولة السيرفر تلقائياً
+          timeout 3300 python main.py || true
