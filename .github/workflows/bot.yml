@@ -4,7 +4,6 @@ on:
   push:
     branches: [ main ]
   schedule:
-    # يتم إعادة التشغيل تلقائياً كل ساعتين لضمان استقرار السجلات ونظافة السيرفر
     - cron: '0 */2 * * *'
   workflow_dispatch:
 
@@ -23,12 +22,11 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install pytelegrambotapi==4.14.0 yt-dlp==2023.12.30 urllib3<3.0
 
-      - name: Run Bot 
+      - name: Run Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
-          # تشغيل البوت لمدة ساعتين (7200 ثانية) ثم إعادة التشغيل بسلام لتحديث السجلات
-          timeout 7200 python main.py || true
+          python main.py
