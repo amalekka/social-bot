@@ -18,7 +18,7 @@ try:
     bot = telebot.TeleBot(TOKEN)
 
     # =========================================================
-    # دالة التحميل الموحدة للمنصات (مع استبعاد يوتيوب)
+    # دالة التحميل الموحدة والمحدثة خصيصاً لدعم تيك توك والمنصات
     # =========================================================
     def download_media(url, output_dir):
         if "youtube.com" in url.lower() or "youtu.be" in url.lower():
@@ -26,6 +26,7 @@ try:
 
         output_template = os.path.join(output_dir, "%(title).80s_%(id)s.%(ext)s")
         
+        # إعدادات متقدمة جداً لتخطي حماية تيك توك ومنصات السوشيال ميديا
         ydl_opts = {
             'format': 'best[ext=mp4]/best', 
             'outtmpl': output_template,
@@ -33,7 +34,17 @@ try:
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
-            'noprogress': True  # منع طباعة شريط التحميل المئوي في اللوج للحفاظ على نظافته
+            'noprogress': True,
+            # التعديلات الذكية لتخطي حظر تيك توك والمحاكاة كمتصفح حقيقي
+            'extractor_args': {
+                'tiktok': {
+                    'app_version': '34.0.0',
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+            }
         }
 
         try:
@@ -42,7 +53,7 @@ try:
         except Exception as e:
             if "YouTube_Not_Supported" in str(e):
                 raise Exception("عذراً، التحميل من يوتيوب غير مدعوم.")
-            raise Exception("تعذر التحميل، تأكد أن الرابط عام وصحيح.")
+            raise Exception("تعذر التحميل، تأكد أن الرابط عام وصحيح ومنصة مدعومة.")
         
         files = [os.path.join(output_dir, f) for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
         
@@ -58,7 +69,7 @@ try:
     def send_welcome(message):
         welcome_text = (
             "مرحباً بك في بوت التحميل الشامل 📥🔥\n\n"
-            "يمكنني التحميل من فيسبوك، انستقرام، تيك توك، تويتر (X)، سناب شات، وباقي المنصات (ما عدا يوتيوب).\n\n"
+            "يمكنني التحميل الآن من تيك توك (TikTok)، فيسبوك، انستقرام، تويتر (X)، سناب شات، وباقي المنصات (ما عدا يوتيوب).\n\n"
             "فقط أرسل الرابط العام وسأقوم بتحميله وإرساله لك فوراً."
         )
         bot.reply_to(message, welcome_text)
@@ -84,7 +95,7 @@ try:
             bot.reply_to(message, "❌ يرجى إرسال رابط صحيح يبدأ بـ http أو https.")
             return
 
-        status = bot.reply_to(message, "⏳ جاري معالجة الرابط وتحميل الفيديو...\nيرجى الانتظار.")
+        status = bot.reply_to(message, "⏳ جاري معالجة الرابط وتحميل الفيديو من المنصة...\nيرجى الانتظار.")
         temp_dir = tempfile.mkdtemp(prefix="media_")
 
         try:
@@ -117,7 +128,6 @@ try:
             bot.delete_message(message.chat.id, status.message_id)
 
         except Exception as e:
-            # إظهار رسائل عامة ونظيفة للمستخدم دون أي أكواد أو روابط خطأ
             error_msg = str(e)
             if "عذراً" in error_msg:
                 user_text = f"❌ {error_msg}"
@@ -129,7 +139,6 @@ try:
             except Exception:
                 bot.reply_to(message, user_text)
         finally:
-            # مسح الملفات المؤقتة فوراً لمنع أي تخزين على السيرفر
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     # =========================================================
