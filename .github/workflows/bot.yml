@@ -3,9 +3,10 @@ name: Telegram Bot 24/7 Hosting
 on:
   push:
     branches: [ main ]
-  schedule:
-    - cron: '0 */5 * * *'
   workflow_dispatch:
+  schedule:
+    # يعمل كمنبه احتياطي فقط في حال حدوث صيانة في سيرفرات GitHub
+    - cron: '0 */6 * * *'
 
 concurrency:
   group: telegram-bot-runner
@@ -19,20 +20,42 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      # 1. مسح كل سجلات التشغيل السابقة والإبقاء على السجل الحالي فقط نظيفاً
+      - name: Clean Old Action Logs
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          CURRENT_RUN_ID=${{ github.run_id }}
+          gh run list --workflow=bot.yml --limit 50 --json databaseId -q ".[].databaseId" | while read -r id; do
+            if [ "$id" != "$CURRENT_RUN_ID" ]; then
+              gh run delete "$id" || true
+            fi
+          done
+
+      # 2. تفعيل الكاش لتثبيت المكتبات في ثوانٍ معدودة عند تبديل الجلسة
+      - name: Set up Python with Cache
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install Dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg
-          python -m pip install --upgrade pip
-          python -m pip install pyTelegramBotAPI yt-dlp "urllib3<3.0"
+          pip install pyTelegramBotAPI "urllib3<3.0"
+          pip install -U --pre "yt-dlp[default]"
 
+      # 3. تشغيل البوت لمدة 5 ساعات متواصلة مع إعادة التشغيل الفوري في نفس الثانية لو فصل الاتصال
       - name: Run Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
-          # حلقة حماية: إذا توقف البوت لأي سبب يعيد تشغيله فوراً طوال مدة الـ 5 ساعات (18000 ثانية)
-          timeout 18000 bash -c 'while true; do python -u main.py; echo "Restarting bot in 2s..."; sleep 2; done' || exit 0
+          timeout 18000 bash -c 'while true; do python -u main.py; sleep 1; done' || exit 0
+
+      # 4. إطلاق الجلسة الجديدة في نفس الثانية فور انتهاء الجلسة الحالية
+      - name: Trigger Next Run Immediately
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          gh workflow run bot.yml --ref main
