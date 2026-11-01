@@ -14,35 +14,38 @@ if not TOKEN:
     sys.exit(1)
 
 try:
-    print("⏳ جاري تهيئة البوت والاتصال بتليجرام...")
+    print("⏳ جاري تهيئة البوت الشامل والاتصال بتليجرام...")
     bot = telebot.TeleBot(TOKEN)
 
     # =========================================================
-    # دالة التحميل الموحدة والمحدثة خصيصاً لدعم تيك توك والمنصات
+    # دالة التحميل الشاملة (يوتيوب + تيك توك + كافة المنصات)
     # =========================================================
     def download_media(url, output_dir):
-        if "youtube.com" in url.lower() or "youtu.be" in url.lower():
-            raise Exception("YouTube_Not_Supported")
-
         output_template = os.path.join(output_dir, "%(title).80s_%(id)s.%(ext)s")
         
-        # إعدادات متقدمة جداً لتخطي حماية تيك توك ومنصات السوشيال ميديا
         ydl_opts = {
-            'format': 'best[ext=mp4]/best', 
+            # اختيار أفضل جودة لا تتخطى 50 ميجابايت (أو دقة 720p كحد أقصى) لضمان قبولها في تليجرام
+            'format': 'best[filesize<49M][ext=mp4]/best[height<=720][ext=mp4]/best[ext=mp4]/best', 
             'outtmpl': output_template,
             'restrictfilenames': True,
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
             'noprogress': True,
-            # التعديلات الذكية لتخطي حظر تيك توك والمحاكاة كمتصفح حقيقي
+            'geo_bypass': True,
+            # أحدث إعدادات نوفمبر 2026 لتخطي حظر يوتيوب وتيك توك على السيرفرات السحابية
             'extractor_args': {
+                'youtube': {
+                    # استخدام عملاء iOS والتلفاز والهاتف لتفادي طلب تسجيل الدخول على سيرفر GitHub
+                    'player_client': ['ios', 'tv_embedded', 'mweb', 'android'],
+                    'player_skip': ['webpage', 'configs'],
+                },
                 'tiktok': {
                     'app_version': '34.0.0',
                 }
             },
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
             }
         }
@@ -50,10 +53,8 @@ try:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
-        except Exception as e:
-            if "YouTube_Not_Supported" in str(e):
-                raise Exception("عذراً، التحميل من يوتيوب غير مدعوم.")
-            raise Exception("تعذر التحميل، تأكد أن الرابط عام وصحيح ومنصة مدعومة.")
+        except Exception:
+            raise Exception("تعذر التحميل، تأكد أن الرابط عام وصحيح.")
         
         files = [os.path.join(output_dir, f) for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
         
@@ -69,8 +70,13 @@ try:
     def send_welcome(message):
         welcome_text = (
             "مرحباً بك في بوت التحميل الشامل 📥🔥\n\n"
-            "يمكنني التحميل الآن من تيك توك (TikTok)، فيسبوك، انستقرام، تويتر (X)، سناب شات، وباقي المنصات (ما عدا يوتيوب).\n\n"
-            "فقط أرسل الرابط العام وسأقوم بتحميله وإرساله لك فوراً."
+            "يدعم التحميل المباشر من جميع المنصات:\n"
+            "📺 YouTube (فيديوهات و Shorts)\n"
+            "🎵 TikTok (بدون علامة مائية)\n"
+            "📘 Facebook\n"
+            "📸 Instagram\n"
+            "🐦 Twitter (X) & Snapchat\n\n"
+            "أرسل أي رابط عام وسأقوم بتحميله وإرساله لك فوراً."
         )
         bot.reply_to(message, welcome_text)
 
@@ -79,7 +85,7 @@ try:
     # =========================================================
     @bot.message_handler(commands=['ping'])
     def send_ping(message):
-        bot.reply_to(message, "Pong! 🏓\nالبوت متصل ويعمل بكفاءة.")
+        bot.reply_to(message, "Pong! 🏓\nالبوت متصل ويعمل بكفاءة على جميع المنصات.")
 
     # =========================================================
     # 3. استقبال الروابط ومعالجتها
@@ -95,7 +101,7 @@ try:
             bot.reply_to(message, "❌ يرجى إرسال رابط صحيح يبدأ بـ http أو https.")
             return
 
-        status = bot.reply_to(message, "⏳ جاري معالجة الرابط وتحميل الفيديو من المنصة...\nيرجى الانتظار.")
+        status = bot.reply_to(message, "⏳ جاري معالجة الرابط وتحميل الفيديو...\nيرجى الانتظار.")
         temp_dir = tempfile.mkdtemp(prefix="media_")
 
         try:
@@ -127,13 +133,8 @@ try:
 
             bot.delete_message(message.chat.id, status.message_id)
 
-        except Exception as e:
-            error_msg = str(e)
-            if "عذراً" in error_msg:
-                user_text = f"❌ {error_msg}"
-            else:
-                user_text = "❌ تعذر تحميل الفيديو. تأكد أن الرابط عام وصحيح ومن منصة مدعومة."
-            
+        except Exception:
+            user_text = "❌ تعذر تحميل الفيديو. تأكد أن الرابط عام وصحيح ولا يتجاوز الحد المسموح."
             try:
                 bot.edit_message_text(user_text, message.chat.id, status.message_id)
             except Exception:
@@ -144,11 +145,11 @@ try:
     # =========================================================
     # 4. حلقة التشغيل الأبدية لمنع التوقف المفاجئ
     # =========================================================
-    print("🚀 البوت متصل الآن وبوضع التشغيل المستمر (Infinity Polling)...")
+    print("🚀 البوت الشامل متصل الآن وبوضع التشغيل المستمر (Infinity Polling)...")
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=30, logger_level=None)
-        except Exception as err:
+        except Exception:
             print("⚠️ انقطاع مؤقت في الشبكة، جاري إعادة الاتصال خلال 3 ثوانٍ...", file=sys.stderr)
             time.sleep(3)
 
