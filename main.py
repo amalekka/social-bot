@@ -171,7 +171,7 @@ try:
     @bot.message_handler(commands=['start'])
     def send_welcome(message):
         welcome_text = (
-            "مرحباً بك في بوت التحميل الشامل 📥🔥\n\n"
+            "مرحباً بك في بوت سوشيال مجاني لتحميل الفيديوهات بجودة عالية 📥🔥\n\n"
             "يدعم التحميل المباشر من جميع المنصات:\n"
             "📺 YouTube (فيديوهات و Shorts)\n"
             "🎵 TikTok (بدون علامة مائية)\n"
