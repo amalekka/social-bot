@@ -39,13 +39,14 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install Dependencies
+            - name: Install Dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg
+          sudo apt-get update && sudo apt-get install -y ffmpeg nodejs
           python -m pip install --upgrade pip
           python -m pip install pyTelegramBotAPI "urllib3<3.0"
-          # هذا السطر هو السر: تثبيت أحدث نسخة تطويرية لـ yt-dlp لدعم تيك توك وباقي المنصات
-          python -m pip install --force-reinstall --no-deps -U --pre "yt-dlp[default]"
+          # تثبيت أحدث نسخة تطويرية لـ yt-dlp مع إضافة توليد رموز PO Token لتخطي حظر يوتيوب
+          python -m pip install --force-reinstall -U --pre "yt-dlp[default]"
+          python -m pip install -U bgutil-ytdlp-pot-provider
 
       # 3. تشغيل البوت لمدة 5 ساعات متواصلة مع إعادة التشغيل الفوري في نفس الثانية لو فصل الاتصال
       - name: Run Bot
