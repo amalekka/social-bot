@@ -215,7 +215,7 @@ try:
             if fallback_file:
                 return fallback_file
 
-        raise Exception("تعذر التحميل، تأكد أن الرابط عام وصحيح.")
+        raise Exception("تعذر التحميل، تأكد أن الرابط عام وليس خاص.")
 
     # =========================================================
     # 1. الرد على أمر /start
@@ -223,14 +223,14 @@ try:
     @bot.message_handler(commands=['start'])
     def send_welcome(message):
         welcome_text = (
-            "مرحباً بك في بوت التحميل الشامل 📥🔥\n\n"
-            "يدعم التحميل المباشر وإرسال الفيديو من جميع المنصات:\n"
+            "مرحباً بك في بوت سوشيال مجاني لتحميل الفيديوهات بجودة عالية📥🔥\n\n"
+            "البوت يدعم تحميل الفيديوهات من جميع منصات سوشيال ميديا والمنصات التالية:\n"
             "📺 YouTube (فيديوهات عادية و Shorts)\n"
             "🎵 TikTok (بدون علامة مائية)\n"
             "📘 Facebook\n"
             "📸 Instagram\n"
             "🐦 Twitter (X) & Snapchat\n\n"
-            "أرسل أي رابط عام وسأقوم بتحميل الفيديو وإرساله لك فوراً."
+            "أرسل أي رابط الفيديو وانتظر ثواني حتي يصلك الفيديو."
         )
         bot.reply_to(message, welcome_text)
 
@@ -280,7 +280,7 @@ try:
                 bot.send_video(
                     message.chat.id,
                     file,
-                    caption="✅ تم التحميل بنجاح",
+                    caption="✅ تم التحميل الفيديو بنجاح",
                     supports_streaming=True,
                     timeout=300
                 )
@@ -288,7 +288,7 @@ try:
             bot.delete_message(message.chat.id, status.message_id)
 
         except Exception:
-            user_text = "❌ تعذر تحميل الفيديو. تأكد أن الرابط عام وصحيح ولا يتجاوز الحد المسموح."
+            user_text = "❌ تعذر تحميل الفيديو. تأكد أن الرابط عام وليس خاص ولا يتجاوز الحد المسموح."
             try:
                 bot.edit_message_text(user_text, message.chat.id, status.message_id)
             except Exception:
