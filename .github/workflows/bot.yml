@@ -32,10 +32,16 @@ jobs:
             fi
           done
 
-      # 2. تفعيل Cloudflare WARP لتغيير IP سيرفر GitHub المحظور في يوتيوب
-      - name: Setup Cloudflare WARP
-        uses: ouraigua/setup-warp@v1
-        continue-on-error: true
+      # 2. تثبيت وتفعيل Cloudflare WARP مباشرة من المصدر الرسمي لتغيير IP السيرفر
+      - name: Setup Cloudflare WARP Directly
+        run: |
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update && sudo apt-get install -y cloudflare-warp
+          sudo warp-cli --accept-tos registration new || sudo warp-cli --accept-tos register || true
+          sudo warp-cli --accept-tos mode warp || true
+          sudo warp-cli --accept-tos connect || true
+          sleep 3
 
       # 3. تفعيل الكاش لتثبيت المكتبات في ثوانٍ معدودة عند تبديل الجلسة
       - name: Set up Python with Cache
@@ -54,12 +60,14 @@ jobs:
           python -m pip install -U bgutil-ytdlp-pot-provider
           
           # تحميل وتشغيل سيرفر فك حظر يوتيوب في الخلفية على بورت 4416
-          git clone --single-branch --branch 0.7.2 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /tmp/pot-server
-          cd /tmp/pot-server/server
-          npm install
-          npx tsc
-          nohup node build/main.js > /dev/null 2>&1 &
-          sleep 3
+          git clone --single-branch --branch 0.7.2 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /tmp/pot-server || true
+          if [ -d "/tmp/pot-server/server" ]; then
+            cd /tmp/pot-server/server
+            npm install
+            npx tsc
+            nohup node build/main.js > /dev/null 2>&1 &
+            sleep 3
+          fi
 
       # 5. تشغيل البوت لمدة 5 ساعات متواصلة مع إعادة التشغيل الفوري في نفس الثانية لو فصل الاتصال
       - name: Run Bot
