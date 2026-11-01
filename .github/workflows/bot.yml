@@ -5,7 +5,6 @@ on:
     branches: [ main ]
   workflow_dispatch:
   schedule:
-    # يعمل كمنبه احتياطي فقط في حال حدوث صيانة في سيرفرات GitHub
     - cron: '0 */6 * * *'
 
 concurrency:
@@ -20,7 +19,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 1. مسح كل سجلات التشغيل السابقة والإبقاء على السجل الحالي فقط نظيفاً
+      # 1. مسح السجلات القديمة
       - name: Clean Old Action Logs
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
@@ -32,30 +31,43 @@ jobs:
             fi
           done
 
-      # 2. تفعيل الكاش لتثبيت المكتبات في ثوانٍ معدودة عند تبديل الجلسة
+      # 2. تفعيل Cloudflare WARP لتغيير IP سيرفر GitHub المحظور في يوتيوب
+      - name: Setup Cloudflare WARP
+        uses:ouraigua/setup-warp@v1
+        continue-on-error: true
+
+      # 3. إعداد بايثون
       - name: Set up Python with Cache
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install Dependencies
+      # 4. تثبيت المكتبات وتشغيل سيرفر توليد تذاكر يوتيوب (PO Token Server) في الخلفية
+      - name: Install Dependencies & Start PO Token Server
         run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg nodejs
+          sudo apt-get update && sudo apt-get install -y ffmpeg nodejs npm
           python -m pip install --upgrade pip
           python -m pip install pyTelegramBotAPI "urllib3<3.0"
-          # تثبيت أحدث نسخة تطويرية لـ yt-dlp مع إضافة توليد رموز PO Token لتخطي حظر يوتيوب
           python -m pip install --force-reinstall -U --pre "yt-dlp[default]"
           python -m pip install -U bgutil-ytdlp-pot-provider
+          
+          # تحميل وتشغيل سيرفر فك حظر يوتيوب في الخلفية على بورت 4416
+          git clone --single-branch --branch 0.7.2 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /tmp/pot-server
+          cd /tmp/pot-server/server
+          npm install
+          npx tsc
+          nohup node build/main.js > /dev/null 2>&1 &
+          sleep 3
 
-      # 3. تشغيل البوت لمدة 5 ساعات متواصلة مع إعادة التشغيل الفوري في نفس الثانية لو فصل الاتصال
+      # 5. تشغيل البوت
       - name: Run Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
           timeout 18000 bash -c 'while true; do python -u main.py; sleep 1; done' || exit 0
 
-      # 4. إطلاق الجلسة الجديدة في نفس الثانية فور انتهاء الجلسة الحالية
+      # 6. إطلاق الجلسة التالية فور الانتهاء
       - name: Trigger Next Run Immediately
         if: always()
         env:
