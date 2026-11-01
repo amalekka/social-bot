@@ -3,10 +3,10 @@ import sys
 import time
 import tempfile
 import shutil
+import requests
 import telebot
 import yt_dlp
 
-# قراءة التوكن بأمان من متغيرات البيئة (GitHub Secrets)
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 if not TOKEN:
@@ -18,14 +18,52 @@ try:
     bot = telebot.TeleBot(TOKEN)
 
     # =========================================================
+    # خطة بديلة احتياطية لتحميل يوتيوب عبر API خارجي إذا حظر السيرفر
+    # =========================================================
+    def fallback_youtube_download(url, output_dir):
+        apis = [
+            "https://api.cobalt.tools/api/json",
+            "https://co.wuk.sh/api/json"
+        ]
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        }
+        payload = {
+            "url": url,
+            "vQuality": "720",
+            "filenamePattern": "basic"
+        }
+        for api in apis:
+            try:
+                res = requests.post(api, json=payload, headers=headers, timeout=15)
+                if res.status_code == 200:
+                    data = res.json()
+                    dl_url = data.get("url")
+                    if dl_url:
+                        file_path = os.path.join(output_dir, "youtube_video.mp4")
+                        with requests.get(dl_url, stream=True, timeout=120) as r:
+                            r.raise_for_status()
+                            with open(file_path, "wb") as f:
+                                for chunk in r.iter_content(chunk_size=8192):
+                                    f.write(chunk)
+                        if os.path.exists(file_path) and os.path.getsize(file_path) > 10000:
+                            return file_path
+            except Exception:
+                continue
+        return None
+
+    # =========================================================
     # دالة التحميل الشاملة (يوتيوب + تيك توك + كافة المنصات)
     # =========================================================
     def download_media(url, output_dir):
         output_template = os.path.join(output_dir, "%(title).80s_%(id)s.%(ext)s")
         
         ydl_opts = {
-            # اختيار أفضل جودة لا تتخطى 50 ميجابايت (أو دقة 720p كحد أقصى) لضمان قبولها في تليجرام
-            'format': 'best[filesize<49M][ext=mp4]/best[height<=720][ext=mp4]/best[ext=mp4]/best', 
+            # دمج أفضل صوت وصورة بصيغة mp4 بما لا يتجاوز 50 ميجابايت
+            'format': 'best[filesize<49M][ext=mp4]/bestvideo[filesize<40M][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best',
+            'merge_output_format': 'mp4',
             'outtmpl': output_template,
             'restrictfilenames': True,
             'noplaylist': True,
@@ -33,19 +71,20 @@ try:
             'no_warnings': True,
             'noprogress': True,
             'geo_bypass': True,
-            # أحدث إعدادات نوفمبر 2026 لتخطي حظر يوتيوب وتيك توك على السيرفرات السحابية
             'extractor_args': {
                 'youtube': {
-                    # استخدام عملاء iOS والتلفاز والهاتف لتفادي طلب تسجيل الدخول على سيرفر GitHub
-                    'player_client': ['ios', 'tv_embedded', 'mweb', 'android'],
-                    'player_skip': ['webpage', 'configs'],
+                    # العملاء المتوافقون مع سيرفر PO Token المحلي
+                    'player_client': ['web_creator', 'tv', 'mweb'],
+                },
+                'youtubepot-bgutilhttp': {
+                    'base_url': ['http://127.0.0.1:4416'],
                 },
                 'tiktok': {
                     'app_version': '34.0.0',
                 }
             },
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
             }
         }
@@ -54,6 +93,11 @@ try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
         except Exception:
+            # إذا كان الرابط من يوتيوب وفشل التحميل المباشر، جرب المحرك الاحتياطي فوراً
+            if "youtube.com" in url.lower() or "youtu.be" in url.lower():
+                fallback_file = fallback_youtube_download(url, output_dir)
+                if fallback_file:
+                    return fallback_file
             raise Exception("تعذر التحميل، تأكد أن الرابط عام وصحيح.")
         
         files = [os.path.join(output_dir, f) for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
@@ -108,7 +152,6 @@ try:
             video = download_media(url, temp_dir)
             size_mb = os.path.getsize(video) / (1024 * 1024)
             
-            # فحص الحد الأقصى المسموح به لبوتات تليجرام (50 ميجابايت)
             if size_mb > 49.5:
                 bot.edit_message_text(
                     f"❌ عذراً، حجم الفيديو كبير ({size_mb:.2f} MB).\nأقصى حجم مسموح به عبر تليجرام هو 50 ميجابايت.", 
