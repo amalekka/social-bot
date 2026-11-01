@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   workflow_dispatch:
   schedule:
+    # يعمل كمنبه احتياطي فقط في حال حدوث صيانة في سيرفرات GitHub
     - cron: '0 */6 * * *'
 
 concurrency:
@@ -19,7 +20,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 1. مسح السجلات القديمة
+      # 1. مسح كل سجلات التشغيل السابقة والإبقاء على السجل الحالي فقط نظيفاً
       - name: Clean Old Action Logs
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
@@ -33,10 +34,10 @@ jobs:
 
       # 2. تفعيل Cloudflare WARP لتغيير IP سيرفر GitHub المحظور في يوتيوب
       - name: Setup Cloudflare WARP
-        uses:ouraigua/setup-warp@v1
+        uses: ouraigua/setup-warp@v1
         continue-on-error: true
 
-      # 3. إعداد بايثون
+      # 3. تفعيل الكاش لتثبيت المكتبات في ثوانٍ معدودة عند تبديل الجلسة
       - name: Set up Python with Cache
         uses: actions/setup-python@v5
         with:
@@ -48,7 +49,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg nodejs npm
           python -m pip install --upgrade pip
-          python -m pip install pyTelegramBotAPI "urllib3<3.0"
+          python -m pip install pyTelegramBotAPI "urllib3<3.0" requests
           python -m pip install --force-reinstall -U --pre "yt-dlp[default]"
           python -m pip install -U bgutil-ytdlp-pot-provider
           
@@ -60,14 +61,15 @@ jobs:
           nohup node build/main.js > /dev/null 2>&1 &
           sleep 3
 
-      # 5. تشغيل البوت
+      # 5. تشغيل البوت لمدة 5 ساعات متواصلة مع إعادة التشغيل الفوري في نفس الثانية لو فصل الاتصال
       - name: Run Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
           timeout 18000 bash -c 'while true; do python -u main.py; sleep 1; done' || exit 0
 
-      # 6. إطلاق الجلسة التالية فور الانتهاء
+      # 6. إطلاق الجلسة الجديدة في نفس الثانية فور انتهاء الجلسة الحالية
       - name: Trigger Next Run Immediately
         if: always()
         env:
