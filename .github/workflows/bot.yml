@@ -55,7 +55,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg nodejs npm
           python -m pip install --upgrade pip
-          python -m pip install pyTelegramBotAPI "urllib3<3.0" requests
+          python -m pip install pyTelegramBotAPI "urllib3<3.0" requests pytubefix
           python -m pip install --force-reinstall -U --pre "yt-dlp[default]"
           python -m pip install -U bgutil-ytdlp-pot-provider
           
