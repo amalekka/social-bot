@@ -9,7 +9,7 @@ import requests
 import telebot
 import yt_dlp
 
-# قراءة التوكن والكوكيز الاختيارية بأمان من متغيرات البيئة (GitHub Secrets)
+# قراءة التوكن والكوكيز بأمان من متغيرات البيئة
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 YOUTUBE_COOKIES = os.environ.get("YOUTUBE_COOKIES")
 
@@ -38,7 +38,7 @@ try:
         return biggest if os.path.getsize(biggest) > 30000 else None
 
     # =========================================================
-    # المحرك الرديف 1: مكتبة PyTubeFix لتحميل ملف الفيديو مباشرة عند حدوث 403
+    # المحرك الرديف 1: مكتبة PyTubeFix لجلب أعلى جودة متاحة
     # =========================================================
     def download_with_pytubefix(url, output_dir):
         try:
@@ -47,7 +47,7 @@ try:
             for client in clients:
                 try:
                     yt = YouTube(url, client=client)
-                    # البحث عن ملف فيديو MP4 مدمج بالصوت والصورة ويناسب حجم تليجرام
+                    # محاولة جلب أفضل دقة مدمجة قريبة من 50 ميجابايت
                     stream = (
                         yt.streams.filter(progressive=True, file_extension='mp4')
                         .order_by('resolution')
@@ -59,12 +59,12 @@ try:
                         if out_file and os.path.exists(out_file) and os.path.getsize(out_file) > 30000:
                             return out_file
 
-                    # إذا كان الفيديو طويلاً، نختار دقة 360p أو 480p وندمج الصوت والصورة بـ ffmpeg
+                    # دمج أعلى دقة فيديو (حتى 720p/1080p) مع الصوت بما لا يتجاوز 49 ميجابايت
                     v_stream = (
-                        yt.streams.filter(adaptive=True, file_extension='mp4', only_video=True, res="360p").first()
-                        or yt.streams.filter(adaptive=True, file_extension='mp4', only_video=True).order_by('resolution').asc().first()
+                        yt.streams.filter(adaptive=True, file_extension='mp4', only_video=True, res="720p").first()
+                        or yt.streams.filter(adaptive=True, file_extension='mp4', only_video=True).order_by('resolution').desc().first()
                     )
-                    a_stream = yt.streams.filter(adaptive=True, only_audio=True).order_by('abr').asc().first()
+                    a_stream = yt.streams.filter(adaptive=True, only_audio=True).order_by('abr').desc().first()
 
                     if v_stream and a_stream:
                         v_path = v_stream.download(output_path=output_dir, filename="v_temp.mp4")
@@ -74,7 +74,7 @@ try:
                             ["ffmpeg", "-y", "-i", v_path, "-i", a_path, "-c:v", "copy", "-c:a", "aac", merged_path],
                             stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL,
-                            timeout=120
+                            timeout=150
                         )
                         if os.path.exists(merged_path) and os.path.getsize(merged_path) > 30000:
                             return merged_path
@@ -85,7 +85,7 @@ try:
         return None
 
     # =========================================================
-    # المحرك الرديف 2: سحب ملف الفيديو MP4 إلى السيرفر عبر الخوادم الوسيطة
+    # المحرك الرديف 2: السحب السحابي بأعلى جودة
     # =========================================================
     def fallback_youtube_download(url, output_dir):
         headers = {
@@ -96,19 +96,17 @@ try:
         if not vid_id:
             return None
 
-        # تجربة PyTubeFix أولاً لتحميل ملف الفيديو مباشرة
         pytube_file = download_with_pytubefix(f"https://www.youtube.com/watch?v={vid_id}", output_dir)
         if pytube_file:
             return pytube_file
 
-        # إذا فشل، يسحب السيرفر ملف الفيديو MP4 من المحول السحابي ويحفظه لإرساله كفيديو للمستخدم
-        for fmt in ["480", "360", "720"]:
+        for fmt in ["720", "480", "360"]:
             try:
                 init_url = f"https://p.oceansaver.in/ajax/download.php?format={fmt}&url=https://www.youtube.com/watch?v={vid_id}"
                 res = requests.get(init_url, headers=headers, timeout=15).json()
                 if res.get("success") and res.get("id"):
                     task_id = res["id"]
-                    for _ in range(30):
+                    for _ in range(35):
                         time.sleep(2)
                         prog = requests.get(f"https://p.oceansaver.in/ajax/progress.php?id={task_id}", headers=headers, timeout=10).json()
                         if prog.get("success") == 1 and prog.get("download_url"):
@@ -129,7 +127,7 @@ try:
         return None
 
     # =========================================================
-    # الدالة الرئيسية لتحميل ملف الفيديو (يوتيوب + تيك توك + كافة المنصات)
+    # الدالة الرئيسية لتحميل الفيديو بأعلى جودة ممكنة ضمن حد تيليجرام
     # =========================================================
     def download_media(url, output_dir):
         output_template = os.path.join(output_dir, "video_%(id)s.%(ext)s")
@@ -141,12 +139,12 @@ try:
             with open(cookie_file, "w", encoding="utf-8") as cf:
                 cf.write(YOUTUBE_COOKIES)
 
-        # صيغ ذكية تدعم الفيديوهات العادية الطويلة والقصيرة بما لا يتجاوز 50 ميجابايت
+        # استهداف أفضل جودة مدمجة أو دمج فيديو عالي الدقة مع الصوت بما لا يتجاوز 49.5 ميجابايت
         yt_format = (
-            "best[ext=mp4][filesize<49M]/best[ext=mp4][filesize_approx<49M]/"
-            "bestvideo[ext=mp4][filesize<38M]+bestaudio[ext=m4a]/"
-            "bestvideo[ext=mp4][height<=480]+bestaudio[ext=m4a]/"
-            "best[height<=480][ext=mp4]/18/best"
+            "best[ext=mp4][filesize<49.5M]/best[ext=mp4][filesize_approx<49.5M]/"
+            "bestvideo[ext=mp4][filesize<42M]+bestaudio[ext=m4a]/"
+            "bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/"
+            "best[height<=720][ext=mp4]/best"
         )
 
         client_profiles = [
@@ -209,7 +207,6 @@ try:
         if cookie_file and os.path.exists(cookie_file):
             os.remove(cookie_file)
 
-        # إذا رفض يوتيوب التحميل عبر yt-dlp، يقوم المحرك الرديف بتحميل ملف الفيديو نفسه وإرجاعه
         if is_youtube:
             fallback_file = fallback_youtube_download(url, output_dir)
             if fallback_file:
@@ -217,45 +214,33 @@ try:
 
         raise Exception("تعذر التحميل، تأكد أن الرابط عام وليس خاص.")
 
-    # =========================================================
-    # 1. الرد على أمر /start
-    # =========================================================
     @bot.message_handler(commands=['start'])
     def send_welcome(message):
         welcome_text = (
-            "مرحباً بك في بوت سوشيال مجاني لتحميل الفيديوهات بجودة عالية📥🔥\n\n"
-            "البوت يدعم تحميل الفيديوهات من جميع منصات سوشيال ميديا والمنصات التالية:\n"
-            "📺 YouTube (فيديوهات عادية و Shorts)\n"
+            "مرحباً بك في بوت سوشيال مجاني لتحميل الفيديوهات بجودة عالية 📥🔥\n\n"
+            "البوت يدعم تحميل الفيديوهات بأعلى جودة ممكنة من:\n"
+            "📺 YouTube (فيديوهات عالية الدقة و Shorts)\n"
             "🎵 TikTok (بدون علامة مائية)\n"
-            "📘 Facebook\n"
-            "📸 Instagram\n"
-            "🐦 Twitter (X) & Snapchat\n\n"
-            "أرسل أي رابط الفيديو وانتظر ثواني حتي يصلك الفيديو."
+            "📘 Facebook | 📸 Instagram | 🐦 Twitter (X)\n\n"
+            "أرسل أي رابط فيديو وانتظر ثواني حتى يصلك الفيديو جاهزاً للمشاهدة والحفظ الفوري."
         )
         bot.reply_to(message, welcome_text)
 
-    # =========================================================
-    # 2. أمر فحص الحالة (/ping)
-    # =========================================================
     @bot.message_handler(commands=['ping'])
     def send_ping(message):
-        bot.reply_to(message, "Pong! 🏓\nالبوت متصل ويعمل بكفاءة على جميع المنصات.")
+        bot.reply_to(message, "Pong! 🏓\nالبوت متصل ويعمل بكفاءة.")
 
-    # =========================================================
-    # 3. استقبال الروابط وتحميل وإرسال ملف الفيديو للمستخدم
-    # =========================================================
     @bot.message_handler(func=lambda message: True)
     def handle_message(message):
         if not message.text:
             return
 
         url = message.text.strip()
-
         if not url.startswith("http"):
             bot.reply_to(message, "❌ يرجى إرسال رابط صحيح يبدأ بـ http أو https.")
             return
 
-        status = bot.reply_to(message, "⏳ جاري معالجة الرابط وتحميل الفيديو...\nيرجى الانتظار.")
+        status = bot.reply_to(message, "⏳ جاري معالجة الرابط وجلب أعلى جودة متاحة...\nيرجى الانتظار.")
         temp_dir = tempfile.mkdtemp(prefix="media_")
 
         try:
@@ -264,23 +249,24 @@ try:
 
             if size_mb > 49.5:
                 bot.edit_message_text(
-                    f"❌ عذراً، حجم الفيديو كبير ({size_mb:.2f} MB).\nأقصى حجم مسموح به لبوتات تليجرام هو 50 ميجابايت.",
+                    f"❌ عذراً، حجم الفيديو كبير جداً ({size_mb:.2f} MB).\nأقصى حد مسموح به للإرسال المباشر عبر تيليجرام هو 50 ميجابايت.",
                     message.chat.id,
                     status.message_id
                 )
                 return
 
             bot.edit_message_text(
-                f"📤 تم التحميل ({size_mb:.2f} MB)!\n⏳ جاري إرسال الفيديو إليك...",
+                f"📤 تم التحميل بنجاح ({size_mb:.2f} MB)!\n⏳ جاري الإرسال للبث السريع...",
                 message.chat.id,
                 status.message_id
             )
 
+            # إرسال الفيديو للمستخدم مع تفعيل البث المباشر (Streaming) ليحفظه المستخدم بلمسة
             with open(video, "rb") as file:
                 bot.send_video(
                     message.chat.id,
                     file,
-                    caption="✅ تم التحميل الفيديو بنجاح",
+                    caption="✅ تم إرسال الفيديو بجودة عالية",
                     supports_streaming=True,
                     timeout=300
                 )
@@ -294,17 +280,15 @@ try:
             except Exception:
                 bot.reply_to(message, user_text)
         finally:
+            # مسح الفيديو تماماً من سيرفر GitHub فور إرساله للمستخدم
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-    # =========================================================
-    # 4. حلقة التشغيل الأبدية لمنع التوقف المفاجئ
-    # =========================================================
-    print("🚀 البوت الشامل متصل الآن وبوضع التشغيل المستمر (Infinity Polling)...")
+    print("🚀 البوت الشامل متصل الآن وبوضع التشغيل المستمر...")
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=30, logger_level=None)
         except Exception:
-            print("⚠️ انقطاع مؤقت في الشبكة، جاري إعادة الاتصال خلال 3 ثوانٍ...", file=sys.stderr)
+            print("⚠️ انقطاع مؤقت، جاري إعادة الاتصال خلال 3 ثوانٍ...", file=sys.stderr)
             time.sleep(3)
 
 except Exception as e:
