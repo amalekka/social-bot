@@ -1,0 +1,52 @@
+name: Safe Bot Runner 24/7
+
+on:
+  workflow_dispatch:
+  schedule:
+    # يعمل تلقائياً كل 5 ساعات بشكل رسمي وآمن بدون استدعاء ذاتي يسبب الحظر
+    - cron: '0 */5 * * *'
+
+# نفس اسم المجموعة لضمان عدم تشغيل نسختين من البوت في نفس اللحظة أبداً
+concurrency:
+  group: telegram-bot-runner
+  cancel-in-progress: true
+
+jobs:
+  run-bot-safely:
+    runs-on: ubuntu-latest
+    timeout-minutes: 310
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python with Cache
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # تثبيت كل متطلبات ملف main.py الأصلي مع سيرفر فك حظر يوتيوب (بدون الـ VPN المسبب للحظر)
+      - name: Install Dependencies & Start PO Token Server
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg nodejs npm
+          python -m pip install --upgrade pip
+          python -m pip install pyTelegramBotAPI "urllib3<3.0" requests pytubefix
+          python -m pip install --force-reinstall -U --pre "yt-dlp[default]"
+          python -m pip install -U bgutil-ytdlp-pot-provider
+          
+          git clone --single-branch --branch 0.7.2 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /tmp/pot-server || true
+          if [ -d "/tmp/pot-server/server" ]; then
+            cd /tmp/pot-server/server
+            npm install
+            npx tsc
+            nohup node build/main.js > /dev/null 2>&1 &
+            sleep 3
+          fi
+
+      # تشغيل ملف main.py الأصلي كما هو لمدة 5 ساعات متواصلة
+      - name: Run Original Bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+        run: |
+          timeout 17800 bash -c 'while true; do python -u main.py; sleep 2; done' || exit 0
